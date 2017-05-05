@@ -3,9 +3,14 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 from __future__ import print_function
-import os.path
-import sys
+import os, os.path
+import imp, sys
 from collections import namedtuple
+
+def main_is_frozen():
+	return (hasattr(sys, "frozen") or # new py2exe
+		hasattr(sys, "importers") # old py2exe
+		or imp.is_frozen("__main__")) # tools/freeze
 
 def getDirectoryPath(directory):
 	# This is needed for py2exe
