@@ -3,9 +3,12 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 from __future__ import print_function
+import argparse
+import datetime
+import imp
 import os, os.path
-import imp, sys
-from collections import namedtuple
+import sys
+import time
 
 def main_is_frozen():
 	return (hasattr(sys, "frozen") or # new py2exe
@@ -22,3 +25,35 @@ def getDirectoryPath(directory):
 
 def has_generator_started(g):
 	return not (g.gi_frame is not None and g.gi_frame.f_lasti == -1)
+
+def valid_date_type(arg_date_str):
+	"""custom argparse *date* type for user dates values given from the command line"""
+	dashes = arg_date_str.count('-')
+	date_str = arg_date_str
+	if dashes == 1:
+		date_str = '{}{}{}'.format(time.localtime().tm_year, '-', arg_date_str)
+	elif dashes == 2:
+		date_lst = arg_date_str.split('-')
+		if len(date_lst[2]) == 4:
+			date_str = '{}-{}-{}'.format(date_lst[2], date_lst[0], date_lst[1])
+	try:
+		return datetime.date(*time.strptime(date_str, "%Y-%m-%d")[:3])
+	except ValueError:
+		msg = "Given Date ({0}) not valid! Expected format, YYYY-MM-DD!".format(arg_date_str)
+		raise argparse.ArgumentTypeError(msg)
+
+def date_to_timestamp(date):
+	"""Return the timestamp of the supplied datetime.date instance as number of seconds since the epoch."""
+	return time.mktime(date.timetuple())
+
+def prev_date(date):
+	"""Return a datetime.date instance for the date prior to the supplied date."""
+	return datetime.date.fromtimestamp(date_to_timestamp(date)-86400)
+
+def next_date(date):
+	"""Return a datetime.date instance for the date after the supplied date."""
+	return datetime.date.fromtimestamp(date_to_timestamp(date)+86400)
+
+def yesterday():
+	"""Return yesterday's datetime.date instance."""
+	return prev_date(datetime.date.today())
