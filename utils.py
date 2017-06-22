@@ -37,22 +37,25 @@ def valid_date_type(arg_date_str):
 		if len(date_lst[2]) == 4:
 			date_str = '{}-{}-{}'.format(date_lst[2], date_lst[0], date_lst[1])
 	try:
-		return datetime.date(*time.strptime(date_str, "%Y-%m-%d")[:3])
+		if dashes == 0:
+			return datetime.date.fromtimestamp(time.time()-(86400*int(arg_date_str)))
+		else:
+			return datetime.date(*time.strptime(date_str, "%Y-%m-%d")[:3])
 	except ValueError:
-		msg = "Given Date ({0}) not valid! Expected format, YYYY-MM-DD!".format(arg_date_str)
+		msg = "Given Date ({0}) not valid! Expected formats: YYYY-MM-DD, MM-DD-YYYY, MM-DD- or DD for number of days ago.".format(arg_date_str)
 		raise argparse.ArgumentTypeError(msg)
 
 def date_to_timestamp(date):
 	"""Return the timestamp of the supplied datetime.date instance as number of seconds since the epoch."""
 	return time.mktime(date.timetuple())
 
-def prev_date(date):
+def prev_date(date, days=1):
 	"""Return a datetime.date instance for the date prior to the supplied date."""
-	return datetime.date.fromtimestamp(date_to_timestamp(date)-86400)
+	return datetime.date.fromtimestamp(date_to_timestamp(date)-(86400*days))
 
-def next_date(date):
+def next_date(date, days=1):
 	"""Return a datetime.date instance for the date after the supplied date."""
-	return datetime.date.fromtimestamp(date_to_timestamp(date)+86400)
+	return datetime.date.fromtimestamp(date_to_timestamp(date)+(86400*days))
 
 def yesterday():
 	"""Return yesterday's datetime.date instance."""
