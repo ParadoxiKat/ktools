@@ -6,9 +6,13 @@ from __future__ import print_function
 import argparse
 import datetime
 import imp
+import inspect
 import os, os.path
 import sys
 import time
+import traceback
+from importlib import import_module
+from warnings import warn
 
 def main_is_frozen():
 	return (hasattr(sys, "frozen") or # new py2exe
@@ -26,6 +30,20 @@ def getDirectoryPath(directory):
 def whoami(n=0):
 	"""return the name of the function that calls this function. Optional argumentn for number of frames to go back"""
 	return sys._getframe(n+1).f_code.co_name
+
+def load_modules(n=1):
+	module = inspect.getmodule(sys._getframe(n)) # the module that called this function
+	filenames = set()
+	for filename in os.listdir(module.__path__[0]):	
+		if filename.startswith('_'): continue
+		filenames.add(filename.rsplit('.', 1)[0])
+	modules = set()
+	for filename in filenames:
+		try:
+			modules.add(import_module('.{}'.format(filename), module.__package__))
+		except Exception as e:
+			print('Failed loading module {}.\n{}'.format(filename, traceback.format_exc()))
+	return modules
 
 def has_generator_started(g):
 	"""return True if generator g has started running, False otherwise."""
@@ -65,3 +83,16 @@ def next_date(date, days=1):
 def yesterday():
 	"""Return yesterday's datetime.date instance."""
 	return prev_date(datetime.date.today())
+
+def tryimport(modules, obj=None, message=None):
+	    	#Original version of this function copied from the circuits.tools module.
+	    #See circuits at http://circuitsframework.com/
+	modules = (modules,) if isinstance(modules, str) else modules
+	for module in modules:
+		try:
+			m = __import__(module, globals(), locals())
+			return getattr(m, obj) if obj is not None else m
+		except:
+			pass
+	if message is not None:
+		warn(message)
