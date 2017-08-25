@@ -16,10 +16,11 @@ class Error(Exception):
 	"""Config Error"""
 
 class Config(collections.MutableMapping):
-	def __init__(self, name="config", *args, **kwargs):
+	def __init__(self, name="config", subdirectory='', *args, **kwargs):
 		super(Config, self).__init__(*args, **kwargs)
 		self._name = name
 		self._config = dict()
+		self.subdirectory = subdirectory
 		self.reload()
 
 	@property
@@ -30,9 +31,9 @@ class Config(collections.MutableMapping):
 	def name(self, value):
 		self._name = value
 
-	def _parse(self, file_name):
-		data_directory = getDirectoryPath("")
-		file_name = os.path.join(data_directory, file_name)
+	def _parse(self, ext='.json'):
+		data_directory = getDirectoryPath(self.subdirectory)
+		file_name = os.path.join(data_directory, self.name+ext)
 		if os.path.exists(file_name):
 			if not os.path.isdir(file_name):
 				try:
@@ -49,8 +50,8 @@ class Config(collections.MutableMapping):
 
 	def reload(self):
 		self._config.clear()
-		self._config.update(self._parse("{}.json.sample".format(self._name)))
-		self._config.update(self._parse("{}.json".format(self._name)))
+		self._config.update(self._parse(ext=".json.sample"))
+		self._config.update(self._parse())
 
 	def save(self):
 		data_directory = getDirectoryPath("")
