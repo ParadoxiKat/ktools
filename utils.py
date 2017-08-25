@@ -23,7 +23,12 @@ def getDirectoryPath(directory):
 	except AttributeError:
 		return os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", directory)
 
+def whoami(n=0):
+	"""return the name of the function that calls this function. Optional argumentn for number of frames to go back"""
+	return sys._getframe(n+1).f_code.co_name
+
 def has_generator_started(g):
+	"""return True if generator g has started running, False otherwise."""
 	return not (g.gi_frame is not None and g.gi_frame.f_lasti == -1)
 
 def valid_date_type(arg_date_str):
