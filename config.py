@@ -10,17 +10,18 @@ import os.path
 import threading
 
 # Local Modules:
-from .utils import getDirectoryPath
+from .utils import get_program_path, get_settings_path
 
 class Error(Exception):
 	"""Config Error"""
 
 class Config(collections.MutableMapping):
-	def __init__(self, name="config", subdirectory='', *args, **kwargs):
+	def __init__(self, prog_name, name="config", subdir='.', *args, **kwargs):
 		super(Config, self).__init__(*args, **kwargs)
+		self.prog_name = prog_name
 		self._name = name
 		self._config = dict()
-		self.subdirectory = subdirectory
+		self.subdir = subdir
 		self.reload()
 
 	@property
@@ -31,9 +32,7 @@ class Config(collections.MutableMapping):
 	def name(self, value):
 		self._name = value
 
-	def _parse(self, ext='.json'):
-		data_directory = getDirectoryPath(self.subdirectory)
-		file_name = os.path.join(data_directory, self.name+ext)
+	def _parse(self, file_name):
 		if os.path.exists(file_name):
 			if not os.path.isdir(file_name):
 				try:
@@ -50,11 +49,12 @@ class Config(collections.MutableMapping):
 
 	def reload(self):
 		self._config.clear()
-		self._config.update(self._parse(ext=".json.sample"))
-		self._config.update(self._parse())
+		self._config.update(self._parse(get_program_path(self.prog_name, self.subdir, '{}.json'.format(self.name))))
+		self._config.update(self._parse(get_settings_path(self.prog_name, self.subdir, '{}.json'.format(self.name))))
 
 	def save(self):
-		data_directory = getDirectoryPath("")
+		data_directory = get_settings_path(self.prog_name, self.subdir)
+		if not os.path.exists(data_directory): os.makedirs(data_directory)
 		file_name = os.path.join(data_directory, "{}.json".format(self._name))
 		with codecs.open(file_name, "wb", encoding="utf-8") as file_object:
 			json.dump(self._config, file_object, sort_keys=True, indent=2, separators=(",", ": "))

@@ -14,21 +14,43 @@ import traceback
 from importlib import import_module
 from warnings import warn
 
-def main_is_frozen():
-	return (hasattr(sys, "frozen") or # new py2exe
-		hasattr(sys, "importers") # old py2exe
-		or imp.is_frozen("__main__")) # tools/freeze
+def is_frozen():
+	frozen = getattr(sys, "frozen", False) # new py2exe, py2app
+	if frozen is True: frozen = 'cx_freeze'
+	if not frozen:
+		if getattr(sys, "importers", False): frozen = 'old_py2exe'# old py2exe
+		elif imp.is_frozen("__main__"): frozen = 'tools/freeze'# tools/freeze
+	return frozen
 
-def getDirectoryPath(directory):
-	# This is needed for py2exe
-	try:
-		if sys.frozen or sys.importers:
-			return os.path.join(os.path.dirname(sys.executable), directory)
-	except AttributeError:
-		return os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", directory)
+def get_program_path(*subdirs):
+	frozen = is_frozen()
+	mainpath = getattr(sys.modules['__main__'], '__file__', None)
+	if frozen: path = os.path.dirname(os.path.realpath(sys.executable))
+	elif mainpath: path = os.path.dirname(os.path.realpath(mainpath))
+	else: path = os.path.realpath(os.getcwd())
+	return os.path.join(path, *subdirs)
+
+def get_settings_path(name, *subdirs):
+	userpath = os.path.join(get_program_path(), 'userconfig')
+	if os.path.exists(userpath) and os.path.isdir(userpath): path = userpath
+	elif sys.platform in ('cygwin', 'win32'):
+		if 'APPDATA' in os.environ:
+			path = os.path.join(os.environ['APPDATA'], name)
+		else:
+			path = os.path.expanduser('~/%s' % name)
+	elif sys.platform == 'darwin':
+		path = os.path.expanduser('~/Library/Application Support/%s' % name)
+	elif sys.platform.startswith('linux') or "bsd"in sys.platform:
+		if 'XDG_CONFIG_HOME' in os.environ:
+			path = os.path.join(os.environ['XDG_CONFIG_HOME'], name)
+		else:
+			path = os.path.expanduser('~/.config/%s' % name)
+	else:
+		path = os.path.expanduser('~/.%s' % name)
+	return os.path.join(path, *subdirs)
 
 def whoami(n=0):
-	"""return the name of the function that calls this function. Optional argumentn for number of frames to go back"""
+	"""return the name of the function that calls this function. Optional argument n for number of frames to go back"""
 	return sys._getframe(n+1).f_code.co_name
 
 def load_modules(n=1):
@@ -85,8 +107,8 @@ def yesterday():
 	return prev_date(datetime.date.today())
 
 def tryimport(modules, obj=None, message=None):
-	    	#Original version of this function copied from the circuits.tools module.
-	    #See circuits at http://circuitsframework.com/
+			#Original version of this function copied from the circuits.tools module.
+		#See circuits at http://circuitsframework.com/
 	modules = (modules,) if isinstance(modules, str) else modules
 	for module in modules:
 		try:
