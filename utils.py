@@ -5,14 +5,26 @@
 from __future__ import print_function
 import argparse
 import datetime
+from email import encoders
+from email.message import Message
+from email.mime.audio import MIMEAudio
+from email.mime.base import MIMEBase
+from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import imp
+from importlib import import_module
 import inspect
+import mimetypes
 import os, os.path
+import smtplib
 import sys
 import time
 import traceback
-from importlib import import_module
 from warnings import warn
+
+COMMASPACE = ', '
+
 
 def is_frozen():
 	frozen = getattr(sys, "frozen", False) # new py2exe, py2app
@@ -118,3 +130,66 @@ def tryimport(modules, obj=None, message=None):
 			pass
 	if message is not None:
 		warn(message)
+
+def _get_mime_msg(path, recursive=False):
+	if not os.path.exists(path): raise ValueError('Path does not exist: {}'.format(path))
+	messages = []
+	if os.path.isdir(path):
+		for filename in os.listdir(path):
+			_path = os.path.sep.join((path, filename))
+			if (recursive and os.path.isdir(_path)) or os.path.isfile(_path): messages += _get_mime_msg(_path)
+	elif os.path.isfile(path):
+		# Guess the content type based on the file's extension.  Encoding
+		# will be ignored, although we should check for simple things like
+		# gzip'd or compressed files.
+		print(path)
+		ctype, encoding = mimetypes.guess_type(path)
+		if ctype is None or encoding is not None:
+			# No guess could be made, or the file is encoded (compressed), so
+			# use a generic bag-of-bits type.
+			ctype = 'application/octet-stream'
+		maintype, subtype = ctype.split('/', 1)
+		if maintype == 'text':
+			fp = open(path)
+			# Note: we should handle calculating the charset
+			msg = MIMEText(fp.read(), _subtype=subtype)
+			fp.close()
+		elif maintype == 'image':
+			fp = open(path, 'rb')
+			msg = MIMEImage(fp.read(), _subtype=subtype)
+			fp.close()
+		elif maintype == 'audio':
+			fp = open(path, 'rb')
+			msg = MIMEAudio(fp.read(), _subtype=subtype)
+			fp.close()
+		else:
+			fp = open(path, 'rb')
+			msg = MIMEBase(maintype, subtype)
+			msg.set_payload(fp.read())
+			fp.close()
+			# Encode the payload using Base64
+			encoders.encode_base64(msg)
+		# Set the filename parameter
+		msg.add_header('Content-Disposition', 'attachment', filename=path.rsplit(os.path.sep, 1)[-1])
+		messages = [msg]
+	return messages
+
+def sendmail(sender, recipient, text, subject='', attach=None, smtphost='localhost', recursive=False):
+	if isinstance(recipient, (str, unicode)): recipient = (recipient, )
+	if isinstance(attach, (str, unicode)): attach = (attach,)
+	if attach is None:
+		msg = MIMEText(text)
+	else:
+		msg = MIMEMultipart()
+		msg.preamble = 'You will not see this in a MIME-aware mail reader.\n'
+		for attachment in attach:
+			messages = _get_mime_msg(attachment, recursive=recursive)
+			for _msg in messages:
+				msg.attach(_msg)
+
+	msg['From'] = sender
+	msg['To'] = COMMASPACE.join(recipient)
+	msg['Subject'] = subject
+	server = smtplib.SMTP(smtphost)
+	server.sendmail(sender, recipient, msg.as_string())
+	server.quit()
