@@ -30,7 +30,7 @@ def init_debugging(prog_name='', parser=None, desc='uninteresting', filename='de
 	"""
 	global debug_level
 	with config_lock:
-		c=Config(prog_name)
+		c=Config(prog_name=prog_name)
 		try:
 			debug_level = c['debug_level']
 			if debug_level not in logging._levelNames:
