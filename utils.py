@@ -132,6 +132,20 @@ def tryimport(modules, obj=None, message=None):
 		warn(message)
 
 def _get_mime_msg(path, recursive=False):
+	"""Get MIME messages from a file or directory.
+	
+	Return a MIME Message for path, if path is a file.
+	if path is a directory, return Messages for each file.
+	if recursive is True, recurse into subdirectories.
+	
+	Parameters:
+	path -- the path to get a Message or Messages for.
+	
+	Keyword Arguments:
+	recursive -- whether or not to recurse into subdirectories (default False)
+	
+	returns -- list of MIME Messages
+	"""
 	if not os.path.exists(path): raise ValueError('Path does not exist: {}'.format(path))
 	messages = []
 	if os.path.isdir(path):
@@ -174,7 +188,22 @@ def _get_mime_msg(path, recursive=False):
 		messages = [msg]
 	return messages
 
-def sendmail(sender, recipient, text, subject='', attach=None, smtphost='localhost', recursive=False):
+def sendmail(sender, recipient, text, smtphost='localhost', subject='', attach=None, recursive=False):
+	"""Send email.
+	
+	Send an email. Optionally attach files.
+	
+	Parameters:
+	sender -- sending email address.
+	recipient -- single email address as str or list of email addresses to send to.
+	text -- texxt of the email.
+	
+	Keyword Arguments:
+	smtphost -- the smtp server to use. (default 'localhost')
+	subject -- the email subject. (default '')
+	attach -- file/directory name, or list of files and directories to attach. When a directory is supplied all files within are attached. (default None)
+	recursive -- whether or not to recursively attach subdirectories when directories are supplied to attach. (default False)
+	"""
 	if isinstance(recipient, (str, unicode)): recipient = (recipient, )
 	if isinstance(attach, (str, unicode)): attach = (attach,)
 	if attach is None:
