@@ -12,7 +12,7 @@ from .utils import valid_date_type
 
 debug_level = None
 
-def init_debugging(parser=None, desc='uninteresting', filename='debug.log', filemode='w', format='%(levelname)s: from %(name)s in %(threadName)s: "%(message)s" @ %(asctime)s.%(msecs)d', datefmt='%m/%d/%Y %H:%M:%S'):
+def init_debugging(prog_name='', parser=None, desc='uninteresting', filename='debug.log', filemode='w', format='%(levelname)s: from %(name)s in %(threadName)s: "%(message)s" @ %(asctime)s.%(msecs)d', datefmt='%m/%d/%Y %H:%M:%S'):
 	"""initializes debugging system.
 	
 	Checks for debugging values in config file, and on command line.
@@ -30,7 +30,7 @@ def init_debugging(parser=None, desc='uninteresting', filename='debug.log', file
 	"""
 	global debug_level
 	with config_lock:
-		c=Config()
+		c=Config(prog_name)
 		try:
 			debug_level = c['debug_level']
 			if debug_level not in logging._levelNames:
