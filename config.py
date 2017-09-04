@@ -16,7 +16,7 @@ class Error(Exception):
 	"""Config Error"""
 
 class Config(collections.MutableMapping):
-	def __init__(self, prog_name, name="config", subdir='.', *args, **kwargs):
+	def __init__(self, prog_name='', name="config", subdir='.', *args, **kwargs):
 		super(Config, self).__init__(*args, **kwargs)
 		self.prog_name = prog_name
 		self._name = name

@@ -64,7 +64,7 @@ def init_debugging(prog_name='', parser=None, desc='uninteresting', filename='de
 	if debug_level is not None and debug_level != 0:
 		logging.basicConfig(filename=filename, filemode=filemode, level=debug_level, format=format, datefmt=datefmt)
 		logger.debug('debugging initialized')
-	return parser
+	return parser, args
 
 def dateargs(parser=None, desc='uninteresting', default=None, help='date string'):
 	"""adds date-handling arguments.
