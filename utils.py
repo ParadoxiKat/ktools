@@ -211,6 +211,7 @@ def sendmail(sender, recipient, text, smtphost='localhost', subject='', attach=N
 	else:
 		msg = MIMEMultipart()
 		msg.preamble = 'You will not see this in a MIME-aware mail reader.\n'
+		msg.attach(MIMEText(text))
 		for attachment in attach:
 			messages = _get_mime_msg(attachment, recursive=recursive)
 			for _msg in messages:
