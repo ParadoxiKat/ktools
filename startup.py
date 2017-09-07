@@ -116,6 +116,7 @@ def email_notifier(sender='unknown@nowhere', recipient='', subject='', smtphost=
 		if debugging and logging.root.handlers and hasattr(logging.root.handlers[0], 'baseFilename'):
 			debugfile = opts['debugfile'] = os.path.abspath(logging.root.handlers[0].baseFilename)
 		else: debugfile = opts['debugfile'] = ''
+		opts['debug_level'] = debug_level
 		yield opts
 	except SystemExit: pass
 	except Exception as e:

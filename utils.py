@@ -156,7 +156,6 @@ def _get_mime_msg(path, recursive=False):
 		# Guess the content type based on the file's extension.  Encoding
 		# will be ignored, although we should check for simple things like
 		# gzip'd or compressed files.
-		print(path)
 		ctype, encoding = mimetypes.guess_type(path)
 		if ctype is None or encoding is not None:
 			# No guess could be made, or the file is encoded (compressed), so
