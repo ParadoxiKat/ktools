@@ -17,6 +17,7 @@ from importlib import import_module
 import inspect
 import mimetypes
 import os, os.path
+import string
 import smtplib
 import sys
 import time
@@ -83,23 +84,26 @@ def has_generator_started(g):
 	"""return True if generator g has started running, False otherwise."""
 	return not (g.gi_frame is not None and g.gi_frame.f_lasti == -1)
 
-def valid_date_type(arg_date_str):
-	"""custom argparse *date* type for user dates values given from the command line"""
-	dashes = arg_date_str.count('-')
-	date_str = arg_date_str
+def valid_date_type(date):
+	"""Return a valid datetime object"""
+	if isinstance(date, datetime.datetime): return date.date()
+	elif isinstance(date, datetime.date): return date
+	elif isinstance(date, (int,long,float)): return datetime.date.fromtimestamp(date)
+	dashes = date.count('-')
+	date_str = date
 	if dashes == 1:
-		date_str = '{}{}{}'.format(time.localtime().tm_year, '-', arg_date_str)
+		date_str = '{}{}{}'.format(time.localtime().tm_year, '-', date)
 	elif dashes == 2:
-		date_lst = arg_date_str.split('-')
+		date_lst = date.split('-')
 		if len(date_lst[2]) == 4:
 			date_str = '{}-{}-{}'.format(date_lst[2], date_lst[0], date_lst[1])
 	try:
 		if dashes == 0:
-			return datetime.date.fromtimestamp(time.time()-(86400*int(arg_date_str)))
+			return datetime.date.fromtimestamp(time.time()-(86400*int(date)))
 		else:
 			return datetime.date(*time.strptime(date_str, "%Y-%m-%d")[:3])
 	except ValueError:
-		msg = "Given Date ({0}) not valid! Expected formats: YYYY-MM-DD, MM-DD-YYYY, MM-DD- or DD for number of days ago.".format(arg_date_str)
+		msg = "Given Date ({0}) not valid! Expected formats: YYYY-MM-DD, MM-DD-YYYY, MM-DD- or DD for number of days ago.".format(date)
 		raise argparse.ArgumentTypeError(msg)
 
 def date_to_timestamp(date):
@@ -222,3 +226,15 @@ def sendmail(sender, recipient, text, smtphost='localhost', subject='', attach=N
 	server = smtplib.SMTP(smtphost)
 	server.sendmail(sender, recipient, msg.as_string())
 	server.quit()
+
+def valid_email(email, unlikely=False):
+	if email.count('@') == 1 \
+	and not email.startswith('@') \
+	and not (set(string.punctuation)-set('.-'))&set(email.split('@')[1]): # contains 1 @, that @ isn't the first char, and doesn't contain characters from string.punctuation except for . and -
+		if not unlikely: return True
+		domain = email.split('@')[1]
+		if ' ' in email \
+		or '.' not in domain:
+			return False
+		else: return True
+	return False
