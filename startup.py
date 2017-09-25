@@ -123,8 +123,12 @@ def email_notifier(sender='unknown@nowhere', recipient='', subject='', smtphost=
 		logging.exception('Unhandled exception:')
 		tb = ''.join(traceback.format_exception(*sys.exc_info()))
 		if print_tb: print(tb)
-		subject = opts['subject'] = '{} crashed at {}'.format(opts['program_name'], time.asctime())
-		opts['message'] = 'OOPSE!\n\n{} just crashed. Here\'s the traceback:\n{}\n'.format(program_name, tb)
+		subject = '{} crashed at {}'.format(opts['program_name'], time.asctime())
+		message = 'OOPSE!\n\n{} just crashed. Here\'s the traceback:\n{}\n'.format(program_name, tb)
+		if opts['subject']: subject = ' + '.join(opts['subject'], subject)
+		if opts['message']: message = '\n\n{}\n\n'.format('-'*20).join(opts['message'], message)
+		opts['subject'] = subject
+		opts['message'] = message
 		email_log = True
 	finally:
 		logging.info('Shutting down')
