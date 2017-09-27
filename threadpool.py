@@ -32,10 +32,7 @@ class ThreadPool(object):
 		self.tasks_lock = threading.Condition(threading.Lock())
 		self._resize_lock = threading.Condition(threading.Lock())
 		self._threads = set()
-		for x in range(num_threads):
-			new_thread = _WorkerThread(self, self.tasks_queue, self.tasks_lock)
-			new_thread.start()
-			self._threads.add(new_thread)
+		for x in range(num_threads): self._newthread(self.tasks_queue, self.tasks_lock)
 
 	@property
 	def alive(self):
@@ -47,8 +44,7 @@ class ThreadPool(object):
 		if self.alive and not value: self.size=0
 		elif self.alive == value: return
 		self.size=1
-		
-		
+
 	@property
 	def size(self):
 		return len(self._threads)
@@ -56,6 +52,19 @@ class ThreadPool(object):
 	@size.setter
 	def size(self, value):
 		self.set_thread_count(value)
+
+	@property
+	def _firstid(self):
+		ids={thread.id for thread in self._threads}
+		size = self.size
+		for n in range(1, size+1 ):
+			if n not in ids: return n
+		else: return size+1
+
+	def _newthread(self, queue, lock):
+		new_thread = _WorkerThread(self, queue, lock)
+		new_thread.start()
+		self._threads.add(new_thread)
 
 	def _insert_task(self, new_task):
 		logger.debug('Putting {} in tasks queue.'.format(new_task))
@@ -107,10 +116,7 @@ class ThreadPool(object):
 					return
 				elif n > len(self._threads):
 					#create new threads,start them, and add them to the pool.
-					for x in range(n-len(self._threads)):
-						new_thread=_WorkerThread(self, self.tasks_queue, self.tasks_lock)
-						new_thread.start()
-						self._threads.add(new_thread)
+					for x in range(n-len(self._threads)): self._newthread(self.tasks_queue, self.tasks_lock)
 				else:
 					#Put None into the queue for each thread we want to get rid of.
 					for x in range(len(self._threads)-n):
@@ -122,12 +128,14 @@ class _WorkerThread(threading.Thread):
 	"""Worker thread for use by the threadpool only!"""
 	def __init__(self, pool, tasks_queue, tasks_lock, res_queue=None, res_lock=None):
 		self.alive=True
+		self.id = self.pool._firstid
 		self.pool=pool
 		self.tasks_queue = tasks_queue
 		self.tasks_lock = tasks_lock
 		self.res_queue = res_queue
 		self.res_lock = res_lock or tasks_lock
 		threading.Thread.__init__(self)
+		self.name = "Worker thread{}".format(id)
 
 	def process_task(self, task):
 		if callable(task): func, task = task, {}
