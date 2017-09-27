@@ -88,13 +88,18 @@ class ThreadPool(object):
 		"""
 		insert a group of new tasks into the queue.
 		"""
-		logger.debug("Received {} new tasks.".format(len(tuple(new_tasks))))
+		new_tasks = tuple(new_tasks)
+		num_tasks = len(new_tasks)
+		logger.debug("Received {} new tasks.".format(num_tasks))
 		if self.alive: #we're alive, so we can take new tasks
 			with self.tasks_lock: #Obtain tasks_lock so we can notify threads 
 				for new_task in new_tasks:
 					self._insert_task(new_task)
 				#If any threads are sleeping, wake them up to handle the task.
-				self.tasks_lock.notifyAll()
+				#If we have more (or the same) number of jobs as threads
+				if num_tasks >= self.size: self.tasks_lock.notifyAll()
+				#If we have more threads than tasks, only wake up enough threads to handle the tasks
+				else: self.tasks_lock.notify(n=num_tasks)
 		else:
 			#alive is False, we can't take new tasks
 			raise IOError('The pool is shutting down!')
@@ -124,18 +129,23 @@ class ThreadPool(object):
 		else:
 			raiseTypeError('N must be an int!')
 
+	def stop_thread(self, thread):
+		thread.alive = False
+		try: self._threads.remove(thread)
+		except KeyError: pass
+
 class _WorkerThread(threading.Thread):
 	"""Worker thread for use by the threadpool only!"""
 	def __init__(self, pool, tasks_queue, tasks_lock, res_queue=None, res_lock=None):
 		self.alive=True
-		self.id = self.pool._firstid
+		self.id = pool._firstid
 		self.pool=pool
 		self.tasks_queue = tasks_queue
 		self.tasks_lock = tasks_lock
 		self.res_queue = res_queue
 		self.res_lock = res_lock or tasks_lock
 		threading.Thread.__init__(self)
-		self.name = "Worker thread{}".format(id)
+		self.name = "Worker thread{}".format(self.id)
 
 	def process_task(self, task):
 		if callable(task): func, task = task, {}
@@ -184,7 +194,9 @@ class _WorkerThread(threading.Thread):
 							logger.debug("{}: no tasks left!".format(self.name))
 							continue
 						logger.debug("{}: Received {}.".format(self.name, task))
-				if task is None: break
+				if task is None:
+					self.tasks_queue.task_done()
+					break
 				logger.debug("{} processing task {}.".format(self.name, task))
 				self.process_task(task)
 		except:
@@ -194,8 +206,5 @@ class _WorkerThread(threading.Thread):
 		self.stop()
 
 	def stop(self):
-		if self.alive:
-			logger.debug("{}: Shuttingdown.".format(self.name))
-		try: self.pool._threads.remove(self)
-		except KeyError: pass
+		self.pool.stop_thread(self)
 
