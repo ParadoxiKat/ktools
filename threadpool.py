@@ -22,15 +22,15 @@ logger=logging.getLogger(__name__)
 
 class ThreadPool(object):
 	"""A dynamic thread pool to handle any data type."""
-	def __init__(self, num_threads=5):
+	def __init__(self, num_threads=5, setup=None, cleanup=None):
 		"""num_threads should be an int (defaults to 5 
 		if not supplied).
 		"""
-		#set the number of items the queue can hold to 5 times the threadcount
-		#I don't know why.
-		self.tasks_queue = queue.Queue(num_threads*5)
+		self.tasks_queue = queue.Queue()
 		self.tasks_lock = threading.Condition(threading.Lock())
 		self._resize_lock = threading.Condition(threading.Lock())
+		self.setup = setup
+		self.cleanup = cleanup
 		self._threads = set()
 		for x in range(num_threads): self._newthread(self.tasks_queue, self.tasks_lock)
 
@@ -63,6 +63,7 @@ class ThreadPool(object):
 
 	def _newthread(self, queue, lock):
 		new_thread = _WorkerThread(self, queue, lock)
+		if callable(self.setup): self.setup(new_thread)
 		new_thread.start()
 		self._threads.add(new_thread)
 
@@ -131,6 +132,7 @@ class ThreadPool(object):
 
 	def stop_thread(self, thread):
 		thread.alive = False
+		if callable(self.cleanup): self.cleanup(thread)
 		try: self._threads.remove(thread)
 		except KeyError: pass
 
@@ -146,12 +148,19 @@ class _WorkerThread(threading.Thread):
 		self.res_lock = res_lock or tasks_lock
 		threading.Thread.__init__(self)
 		self.name = "Worker thread{}".format(self.id)
+		self.args = []
+		self.kwargs = {}
 
 	def process_task(self, task):
+		logger.debug("{} processing task {}.".format(self.name, task))
+		if task is None:
+			self.stop()
+			return
 		if callable(task): func, task = task, {}
 		func = task['func']
-		args = task.get('args', ())
+		args = task.get('args', ()) + self.args
 		kwargs = task.get('kwargs', {})
+		kwargs.update(self.kwargs)
 		try:
 			logger.debug("{}: Calling {} with args {} and kwargs {}.".format(self.name, func, args, kwargs))
 			result = func(*args, **kwargs)
@@ -172,7 +181,6 @@ class _WorkerThread(threading.Thread):
 			if result is not None and self.res_queue is not None:
 				with self.res_lock:
 					self.res_queue.put(result)
-			self.tasks_queue.task_done()
 
 	def run(self):
 		logger.debug("{} starting".format(self.name))
@@ -193,12 +201,11 @@ class _WorkerThread(threading.Thread):
 						except queue.Empty:
 							logger.debug("{}: no tasks left!".format(self.name))
 							continue
-						logger.debug("{}: Received {}.".format(self.name, task))
-				if task is None:
-					self.tasks_queue.task_done()
-					break
-				logger.debug("{} processing task {}.".format(self.name, task))
+					else:
+						task = self.tasks_queue.get()
+					logger.debug("{}: Received {}.".format(self.name, task))
 				self.process_task(task)
+				self.tasks_queue.task_done()
 		except:
 			logger.exception('Unhandled error')
 		finally:
