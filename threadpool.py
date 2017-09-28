@@ -11,6 +11,7 @@ try:
 except ImportError:
 	import queue
 import threading
+from types import GeneratorType
 
 # Monkey patch range with xrange in Python2.
 try:
@@ -138,18 +139,17 @@ class ThreadPool(object):
 
 class _WorkerThread(threading.Thread):
 	"""Worker thread for use by the threadpool only!"""
-	def __init__(self, pool, tasks_queue, tasks_lock, res_queue=None, res_lock=None):
+	def __init__(self, pool, tasks_queue, tasks_lock):
 		self.alive=True
 		self.id = pool._firstid
 		self.pool=pool
 		self.tasks_queue = tasks_queue
 		self.tasks_lock = tasks_lock
-		self.res_queue = res_queue
-		self.res_lock = res_lock or tasks_lock
 		threading.Thread.__init__(self)
 		self.name = "Worker thread{}".format(self.id)
 		self.args = []
 		self.kwargs = {}
+		self.callback = None
 
 	def get_task(self):
 		#Obtain tasks_lock so nobody else messes with the queue.
@@ -169,31 +169,35 @@ class _WorkerThread(threading.Thread):
 		if task is None:
 			self.stop()
 			return
-		if callable(task): func, task = task, {}
-		func = task['func']
-		args = task.get('args', ()) + self.args
-		kwargs = task.get('kwargs', {})
-		kwargs.update(self.kwargs)
+		callback = None
+		if isinstance(task, GeneratorType):
+			callback = task.send
+			task = task.next()
+		if callable(task): func, args, kwargs, callback = task, self.args, self.kwargs, lambda x:None
+		elif isinstance(task, (list, tuple)):
+			func = task[0]
+			try: args = task[1]
+			except IndexError: args = []
+			try: kwargs = task[2]
+			except IndexError: kwargs = {}
+			try: callback = task[3]
+			except IndexError: callback = callback
+		if callback is None: callback = lambda x:None
+		args += type(args)(self.args)
+		_kwargs = self.kwargs
+		_kwargs.update(kwargs)
+		kwargs = _kwargs
+		del _kwargs
 		try:
 			logger.debug("{}: Calling {} with args {} and kwargs {}.".format(self.name, func, args, kwargs))
 			result = func(*args, **kwargs)
 			logger.debug('{}: {} returned "{}".'.format(self.name, func, result))
 		except:
 			logger.exception('{} raised an exception:'.format(func))
-			if not hasattr(task, 'exc_handler'): result = None
-			else:
-				exc_info = sys.exc_info()
-				if callable(exc_handler):
-					logger.debug('{}: Trying provided exception handler {}.'.format(self.name, exc_handler))
-					result = exc_handler(args, kwargs, exc_info)
-					logger.debug('{}: Exception handler {} returned "{}"'.format(self.name, result))
-				else:
-					logger.debug('{}: No exception handler provided, returning exc_info'.format(self.name))
-					result = exc_info
+			result = sys.exc_info()
 		finally:
-			if result is not None and self.res_queue is not None:
-				with self.res_lock:
-					self.res_queue.put(result)
+			logger.debug("Calling callback {} with result {}.".format(callback, result))
+			callback(result)
 
 	def run(self):
 		logger.debug("{} starting".format(self.name))
