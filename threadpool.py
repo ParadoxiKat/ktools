@@ -151,6 +151,19 @@ class _WorkerThread(threading.Thread):
 		self.args = []
 		self.kwargs = {}
 
+	def get_task(self):
+		#Obtain tasks_lock so nobody else messes with the queue.
+		with self.tasks_lock:
+			logger.debug("{}: acquired tasks_lock.".format(self.name))
+			if self.tasks_queue.empty():
+				#Wait until something is available.
+				logger.debug("{}: no tasks. Going to sleep.".format(self.name))
+				self.tasks_lock.wait()
+			logger.debug("{}: waking up!".format(self.name))
+			task = self.tasks_queue.get(block=False)
+			logger.debug("{}: Received {}.".format(self.name, task))
+			return task
+
 	def process_task(self, task):
 		logger.debug("{} processing task {}.".format(self.name, task))
 		if task is None:
@@ -188,22 +201,11 @@ class _WorkerThread(threading.Thread):
 		#self.alive is set to false when None is received as a task.
 		try:
 			while self.alive and self.pool.alive:
-				#Obtain tasks_lock so nobody else messes with the queue.
-				with self.tasks_lock:
-					logger.debug("{}: acquired tasks_lock.".format(self.name))
-					if self.tasks_queue.empty():
-						#Wait until something is available.
-						logger.debug("{}: no tasks. Going to sleep.".format(self.name))
-						self.tasks_lock.wait()
-						logger.debug("{}: waking up!".format(self.name))
-						try:
-							task = self.tasks_queue.get(block=False)
-						except queue.Empty:
-							logger.debug("{}: no tasks left!".format(self.name))
-							continue
-					else:
-						task = self.tasks_queue.get()
-					logger.debug("{}: Received {}.".format(self.name, task))
+				try:
+					task = self.get_task()
+				except queue.Empty:
+					logger.debug("{}: no tasks left!".format(self.name))
+					continue
 				self.process_task(task)
 				self.tasks_queue.task_done()
 		except:
