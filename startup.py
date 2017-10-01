@@ -108,7 +108,7 @@ def dateargs(parser=None, desc='uninteresting', default=None, help='date string'
 @contextmanager
 def email_notifier(sender='unknown@nowhere', recipient='', subject='', smtphost='localhost', program_name='', description='uninteresting', debugging=False, parser=None, print_tb=False):
 	opts = {'program_name':program_name, 'description':description, 'debugging':debugging, 'parser':parser, 'args':None, 'message':'', 'attachments':[], 'debugfile':'', 'subject':subject}
-	email_log=False
+	EXIT = email_log=False
 	try:
 		if debugging: parser = opts['parser'] = enable_debugging(parser=parser)
 		if parser: args = opts['args'] = parser.parse_args()
@@ -118,7 +118,7 @@ def email_notifier(sender='unknown@nowhere', recipient='', subject='', smtphost=
 		else: debugfile = opts['debugfile'] = ''
 		opts['debug_level'] = debug_level
 		yield opts
-	except SystemExit: pass
+	except SystemExit: EXIT = True
 	except Exception as e:
 		logging.exception('Unhandled exception:')
 		tb = ''.join(traceback.format_exception(*sys.exc_info()))
@@ -132,7 +132,7 @@ def email_notifier(sender='unknown@nowhere', recipient='', subject='', smtphost=
 		email_log = True
 	finally:
 		logging.info('Shutting down')
-		logging.shutdown()
+		if EXIT: raise SystemExit
 		if recipient and opts['message']:
 			if email_log and os.path.exists(opts['debugfile']):
 				zname = '{}.zip'.format(opts['debugfile'])

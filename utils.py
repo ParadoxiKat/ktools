@@ -137,7 +137,7 @@ def tryimport(modules, obj=None, message=None):
 		warn(message)
 
 def is_exc_info(thing):
-	return isinstance(thing, tuple) and len(thing) == 3 and isinstance(thing[0], type) and issubclass(thing[0], Exception) and isinstance(thing[1], thing[0]) and isinstance(thing[2], types.TracebackType)
+	return isinstance(thing, tuple) and len(thing) == 3 and isinstance(thing[0], type) and issubclass(thing[0], BaseException) and isinstance(thing[1], thing[0]) and isinstance(thing[2], types.TracebackType)
 
 def _get_mime_msg(path, recursive=False):
 	"""Get MIME messages from a file or directory.
