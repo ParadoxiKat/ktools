@@ -64,6 +64,7 @@ class ThreadPool(object):
 		else: return size+1
 
 	def _newthread(self, queue, lock):
+		if self.dying: return
 		new_thread = _WorkerThread(self, queue, lock)
 		if callable(self.setup): self.setup(new_thread)
 		new_thread.start()
