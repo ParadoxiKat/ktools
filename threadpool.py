@@ -29,6 +29,7 @@ class ThreadPool(object):
 		"""
 		self.tasks_queue = queue.Queue()
 		self.tasks_lock = threading.Condition(threading.Lock())
+		self.dying = False
 		self._resize_lock = threading.Condition(threading.Lock())
 		self.setup = setup
 		self.cleanup = cleanup
@@ -69,6 +70,7 @@ class ThreadPool(object):
 		self._threads.add(new_thread)
 
 	def _insert_task(self, new_task):
+		if self.dying: pass
 		logger.debug('Putting {} in tasks queue.'.format(new_task))
 		self.tasks_queue.put(new_task)
 
@@ -77,7 +79,7 @@ class ThreadPool(object):
 		insert a new task into the queue.
 		"""
 		logger.debug("Received {}.".format(new_task))
-		if self.alive:
+		if self.alive and not self.dying:
 			#we're alive, so we can take new tasks
 			with self.tasks_lock: #Obtain tasks_lock so we can notify threads 
 				self._insert_task(new_task)
@@ -93,7 +95,7 @@ class ThreadPool(object):
 		new_tasks = tuple(new_tasks)
 		num_tasks = len(new_tasks)
 		logger.debug("Received {} new tasks.".format(num_tasks))
-		if self.alive: #we're alive, so we can take new tasks
+		if self.alive and not self.dying: #we're alive, so we can take new tasks
 			with self.tasks_lock: #Obtain tasks_lock so we can notify threads 
 				for new_task in new_tasks:
 					self._insert_task(new_task)
@@ -126,10 +128,31 @@ class ThreadPool(object):
 					for x in range(n-len(self._threads)): self._newthread(self.tasks_queue, self.tasks_lock)
 				else:
 					#Put None into the queue for each thread we want to get rid of.
-					for x in range(len(self._threads)-n):
+					for x in range(self.size-n):
 						self.insert_task(None)
 		else:
 			raiseTypeError('N must be an int!')
+
+	def stop(self, wait=True, finish=True):
+		self.dying = True # stop new tasks from being added
+		if finish:
+			#We should let the threads finish up the tasks in the queue, then shut down.
+			#receiving None as a task causes a thread to terminate
+			#setting self.size to 0 causes None to be put into the queue for each thread.
+			self.size = 0
+			if wait: #block until all tasks are done
+				self.tasks_queue.join()
+			else: #daemonize threads and let them finish up the queue on their own.
+				for thread in self._threads.copy(): thread.setDaemon(True)
+		else:
+			#threads should not finish tasks in the queue, die immediately after this iteration
+			for thread in self._threads.copy(): thread.stop()
+			#empty the queue:
+			while not self.tasks_queue.empty():
+				_ = q.get()
+				self.tasks_queue.task_done()
+			#wake up any threads that were waiting to be notified so they are sure to catch the change
+			with self.tasks_lock: self.tasks_lock.notifyAll()
 
 	def stop_thread(self, thread):
 		thread.alive = False
