@@ -26,7 +26,7 @@ class ThreadPoolDying(Exception):
 
 class ThreadPool(object):
 	"""A dynamic thread pool to handle any data type."""
-	def __init__(self, num_threads=5, setup=None, cleanup=None):
+	def __init__(self, num_threads=5, setup=None, cleanup=None, start=False):
 		"""num_threads should be an int (defaults to 5 
 		if not supplied).
 		"""
@@ -37,6 +37,7 @@ class ThreadPool(object):
 		self.cleanup = cleanup
 		self._threads = set()
 		for x in range(num_threads): self._newthread(self.tasks_queue)
+		if start: self.start()
 
 	@property
 	def alive(self):
@@ -44,10 +45,12 @@ class ThreadPool(object):
 
 	@alive.setter
 	def alive(self, value):
-		value = bool(value)
-		if self.alive and not value: self.size=0
-		elif self.alive == value: return
-		self.size=1
+		val = bool(value)
+		if self.alive and not val: self.stop()
+		elif self.alive == val: return
+		else:
+			self.dying = False
+			self.size=value
 
 	@property
 	def size(self):
@@ -56,6 +59,16 @@ class ThreadPool(object):
 	@size.setter
 	def size(self, value):
 		self.set_thread_count(value)
+
+	@property
+	def started(self):
+		if self.size == 0: return False
+		_all = all(_.isAlive() for _ in self._threads)
+		_any = any(_.isAlive() for _ in self._threads)
+		if any and not all:
+			for thread in _threads:
+				if not thread.isAlive(): thread.start()
+		return _any
 
 	@property
 	def _firstid(self):
@@ -69,7 +82,7 @@ class ThreadPool(object):
 		if self.dying: return
 		new_thread = _WorkerThread(self, queue, timeout=timeout)
 		if callable(self.setup): self.setup(new_thread)
-		new_thread.start()
+		if self.started: new_thread.start()
 		self._threads.add(new_thread)
 
 	def _insert_task(self, new_task):
@@ -132,9 +145,18 @@ class ThreadPool(object):
 		else:
 			raiseTypeError('N must be an int!')
 
+	def start(self):
+		if self.started: return # already started
+		if self.size == 0: return #nothing to start
+		started = 0
+		for thread in self._threads:
+			if not thread.isAlive():
+				thread.start()
+				started += 1
+		logger.debug("Started {} threads.".format(started))
+
 	def stop(self, wait=True, finish=True):
-		if self.dying: return # stop has already been called.
-		self.dying = True # stop new tasks from being added
+		if self.dying or not self.started: return # stop has already been called, or no threads have been started.
 		if finish:
 			#We should let the threads finish up the tasks in the queue, then shut down.
 			#receiving None as a task causes a thread to terminate
