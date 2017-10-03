@@ -30,6 +30,7 @@ class ThreadPool(object):
 		"""num_threads should be an int (defaults to 5 
 		if not supplied).
 		"""
+		logger.debug('New ThreadPool "{}".'.format(self))
 		self.tasks_queue = queue.Queue(maxsize=num_threads*2+1)
 		self.dying = False
 		self._resize_lock = threading.Lock()
@@ -38,6 +39,19 @@ class ThreadPool(object):
 		self._threads = set()
 		for x in range(num_threads): self._newthread(self.tasks_queue)
 		if start: self.start()
+
+	def __enter__(self):
+		if not self.size: raise RuntimeError("Can't enter an empty pool!")
+		logger.debug('Entering {}.'.format(self))
+		if not self.started: self.start()
+		return self
+
+	def __exit__(self, etype, val, tb):
+		logger.debug('Exiting {} with "{}, {}, {}".'.format(self, etype, val, tb))
+		if etype is None or etype is KeyboardInterrupt: self.stop()
+		else:
+			self.stop(finish=False)
+			raise etype, val, tb
 
 	@property
 	def alive(self):
@@ -50,7 +64,7 @@ class ThreadPool(object):
 		elif self.alive == val: return
 		else:
 			self.dying = False
-			self.size=value
+			self.size = int(value)
 
 	@property
 	def size(self):
@@ -129,6 +143,7 @@ class ThreadPool(object):
 			#Taking anything but an int here would just be silly!
 			with self._resize_lock:
 				#Obtain _resize_lock so no one else can resize at the same time
+				if n < 0: n = 0 # get rid of negative numbers
 				if n == 0:
 					for x in range(self.size):
 						self._insert_task(None)
@@ -157,6 +172,7 @@ class ThreadPool(object):
 
 	def stop(self, wait=True, finish=True):
 		if self.dying or not self.started: return # stop has already been called, or no threads have been started.
+		self.dying = True
 		if finish:
 			#We should let the threads finish up the tasks in the queue, then shut down.
 			#receiving None as a task causes a thread to terminate
@@ -191,6 +207,7 @@ class _WorkerThread(threading.Thread):
 		self.timeout = timeout
 		threading.Thread.__init__(self)
 		self.name = "Worker thread{}".format(self.id)
+		logger.debug('New thread "{}".'.format(self.name))
 		self.args = []
 		self.kwargs = {}
 		self.callback = None
