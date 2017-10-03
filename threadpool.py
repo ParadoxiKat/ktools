@@ -21,20 +21,22 @@ except NameError:
 
 logger=logging.getLogger(__name__)
 
+class ThreadPoolDying(Exception):
+	"""raised when insert_task or insert_tasks is called on a dying pool"""
+
 class ThreadPool(object):
 	"""A dynamic thread pool to handle any data type."""
 	def __init__(self, num_threads=5, setup=None, cleanup=None):
 		"""num_threads should be an int (defaults to 5 
 		if not supplied).
 		"""
-		self.tasks_queue = queue.Queue()
-		self.tasks_lock = threading.Condition(threading.Lock())
+		self.tasks_queue = queue.Queue(maxsize=num_threads*2+1)
 		self.dying = False
-		self._resize_lock = threading.Condition(threading.Lock())
+		self._resize_lock = threading.Lock()
 		self.setup = setup
 		self.cleanup = cleanup
 		self._threads = set()
-		for x in range(num_threads): self._newthread(self.tasks_queue, self.tasks_lock)
+		for x in range(num_threads): self._newthread(self.tasks_queue)
 
 	@property
 	def alive(self):
@@ -63,15 +65,14 @@ class ThreadPool(object):
 			if n not in ids: return n
 		else: return size+1
 
-	def _newthread(self, queue, lock):
+	def _newthread(self, queue, timeout=0.5):
 		if self.dying: return
-		new_thread = _WorkerThread(self, queue, lock)
+		new_thread = _WorkerThread(self, queue, timeout=timeout)
 		if callable(self.setup): self.setup(new_thread)
 		new_thread.start()
 		self._threads.add(new_thread)
 
 	def _insert_task(self, new_task):
-		if self.dying: pass
 		logger.debug('Putting {} in tasks queue.'.format(new_task))
 		self.tasks_queue.put(new_task)
 
@@ -82,33 +83,29 @@ class ThreadPool(object):
 		logger.debug("Received {}.".format(new_task))
 		if self.alive and not self.dying:
 			#we're alive, so we can take new tasks
-			with self.tasks_lock: #Obtain tasks_lock so we can notify threads 
-				self._insert_task(new_task)
-				#If any threads are sleeping, wake one up to handle the task.
-				self.tasks_lock.notify()
+			self._insert_task(new_task)
 		else: #self.alive is True, we can't take new tasks
-			raiseIOError('The pool has been shut down!')
+			raise ThreadPoolDying
 
 	def insert_tasks(self, new_tasks):
 		"""
 		insert a group of new tasks into the queue.
 		"""
-		new_tasks = tuple(new_tasks)
-		num_tasks = len(new_tasks)
-		logger.debug("Received {} new tasks.".format(num_tasks))
-		if self.alive and not self.dying: #we're alive, so we can take new tasks
-			with self.tasks_lock: #Obtain tasks_lock so we can notify threads 
-				for new_task in new_tasks:
-					self._insert_task(new_task)
-				#If any threads are sleeping, wake them up to handle the task.
-				#If we have more (or the same) number of jobs as threads
-				if num_tasks >= self.size: self.tasks_lock.notifyAll()
-				#If we have more threads than tasks, only wake up enough threads to handle the tasks
-				else: self.tasks_lock.notify(n=num_tasks)
+		new_tasks = iter(new_tasks)
+		inserted = 0
+		while self.alive and not self.dying: #we're alive, so we can take new tasks
+			try:
+				self._insert_task(next(new_tasks))
+				inserted += 1
+			except StopIteration: break
 		else:
 			#alive is False, we can't take new tasks
-			raise IOError('The pool is shutting down!')
-
+			raise ThreadPoolDying
+		unfinished = len(tuple(tasks))
+		if unfinished: numtasks = '{} of {}'.format(inserted, inserted+unfinished)
+		else: numtasks=str(inserted)
+		logger.debug("Inserted {} tasks.".format(numtasks))
+		if unfinished: raise ThreadPoolDying
 
 	def set_thread_count(self, n):
 		"""
@@ -120,29 +117,32 @@ class ThreadPool(object):
 			with self._resize_lock:
 				#Obtain _resize_lock so no one else can resize at the same time
 				if n == 0:
-					self.insert_tasks((None,)*self.size)
+					for x in range(self.size):
+						self._insert_task(None)
 				elif n == len(self._threads):
 					#we don't need to do anything...
 					return
 				elif n > len(self._threads):
-					#create new threads,start them, and add them to the pool.
-					for x in range(n-len(self._threads)): self._newthread(self.tasks_queue, self.tasks_lock)
+					#create new threads, start them, and add them to the pool.
+					for x in range(n-len(self._threads)): self._newthread(self.tasks_queue)
 				else:
 					#Put None into the queue for each thread we want to get rid of.
 					for x in range(self.size-n):
-						self.insert_task(None)
+						self._insert_task(None)
 		else:
 			raiseTypeError('N must be an int!')
 
 	def stop(self, wait=True, finish=True):
+		if self.dying: return # stop has already been called.
 		self.dying = True # stop new tasks from being added
 		if finish:
 			#We should let the threads finish up the tasks in the queue, then shut down.
 			#receiving None as a task causes a thread to terminate
 			#setting self.size to 0 causes None to be put into the queue for each thread.
 			self.size = 0
+			#self.alive = False
 			if wait: #block until all tasks are done
-				self.tasks_queue.join()
+				if not self.tasks_queue.empty(): self.tasks_queue.join()
 			else: #daemonize threads and let them finish up the queue on their own.
 				for thread in self._threads.copy(): thread.setDaemon(True)
 		else:
@@ -152,8 +152,6 @@ class ThreadPool(object):
 			while not self.tasks_queue.empty():
 				_ = q.get()
 				self.tasks_queue.task_done()
-			#wake up any threads that were waiting to be notified so they are sure to catch the change
-			with self.tasks_lock: self.tasks_lock.notifyAll()
 
 	def stop_thread(self, thread):
 		thread.alive = False
@@ -163,30 +161,17 @@ class ThreadPool(object):
 
 class _WorkerThread(threading.Thread):
 	"""Worker thread for use by the threadpool only!"""
-	def __init__(self, pool, tasks_queue, tasks_lock):
+	def __init__(self, pool, tasks_queue, timeout=0.5):
 		self.alive=True
 		self.id = pool._firstid
 		self.pool=pool
 		self.tasks_queue = tasks_queue
-		self.tasks_lock = tasks_lock
+		self.timeout = timeout
 		threading.Thread.__init__(self)
 		self.name = "Worker thread{}".format(self.id)
 		self.args = []
 		self.kwargs = {}
 		self.callback = None
-
-	def get_task(self):
-		#Obtain tasks_lock so nobody else messes with the queue.
-		with self.tasks_lock:
-			logger.debug("{}: acquired tasks_lock.".format(self.name))
-			if self.tasks_queue.empty():
-				#Wait until something is available.
-				logger.debug("{}: no tasks. Going to sleep.".format(self.name))
-				self.tasks_lock.wait()
-			logger.debug("{}: waking up!".format(self.name))
-			task = self.tasks_queue.get(block=False)
-			logger.debug("{}: Received {}.".format(self.name, task))
-			return task
 
 	def process_task(self, task):
 		logger.debug("{} processing task {}.".format(self.name, task))
@@ -228,11 +213,11 @@ class _WorkerThread(threading.Thread):
 		#self.alive determines when this thread should die. pool.alive determines when all threads should die.
 		#self.alive is set to false when None is received as a task.
 		try:
-			while self.alive and self.pool.alive:
+			while self.alive:
 				try:
-					task = self.get_task()
+					task = self.tasks_queue.get(timeout=self.timeout)
+					logger.debug('Received task: "{}"'.format(task))
 				except queue.Empty:
-					logger.debug("{}: no tasks left!".format(self.name))
 					continue
 				self.process_task(task)
 				self.tasks_queue.task_done()
