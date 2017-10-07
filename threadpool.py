@@ -128,7 +128,7 @@ class ThreadPool(object):
 		else:
 			#alive is False, we can't take new tasks
 			raise ThreadPoolDying
-		unfinished = len(tuple(new_tasks))
+		unfinished = len(tuple(tasks))
 		if unfinished: numtasks = '{} of {}'.format(inserted, inserted+unfinished)
 		else: numtasks=str(inserted)
 		logger.debug("Inserted {} tasks.".format(numtasks))
@@ -188,7 +188,7 @@ class ThreadPool(object):
 			for thread in self._threads.copy(): thread.stop()
 			#empty the queue:
 			while not self.tasks_queue.empty():
-				_ = self.tasks_queue.get()
+				_ = q.get()
 				self.tasks_queue.task_done()
 
 	def stop_thread(self, thread):
