@@ -48,7 +48,9 @@ class ThreadPool(object):
 
 	def __exit__(self, etype, val, tb):
 		logger.debug('Exiting {} with "{}, {}, {}".'.format(self, etype, val, tb))
-		if etype is None or etype is KeyboardInterrupt: self.stop()
+		if etype is None or etype is KeyboardInterrupt:
+			self.stop()
+			if etype is KeyboardInterrupt: raise etype, val, tb
 		else:
 			self.stop(finish=False)
 			raise etype, val, tb

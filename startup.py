@@ -118,7 +118,8 @@ def email_notifier(sender='unknown@nowhere', recipient='', subject='', smtphost=
 		else: debugfile = opts['debugfile'] = ''
 		opts['debug_level'] = debug_level
 		yield opts
-	except SystemExit: EXIT = True
+	except (SystemExit, KeyboardInterrupt): EXIT = True
+	except SyntaxError: raise
 	except Exception as e:
 		logging.exception('Unhandled exception:')
 		tb = ''.join(traceback.format_exception(*sys.exc_info()))
