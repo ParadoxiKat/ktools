@@ -28,21 +28,33 @@ from warnings import warn
 COMMASPACE = ', '
 
 
+def get_freezer():
+	frozen = getattr(sys, "frozen", False) # new py2exe, py2app, cx_freeze
+	meipass = getattr(sys, '_MEIPASS', False)
+	if meipass: freezer = 'pyinstaller'
+	elif frozen is True: freezer = 'cx_freeze'
+	elif frozen in ('windows_exe', 'console_exe'): freezer = 'py2exe'
+	elif frozen == 'macosx_app': freezer = 'py2app'
+	elif getattr(sys, "importers", False): freezer = 'old_py2exe'
+	elif imp.is_frozen("__main__"): frozen = 'tools/freeze'
+	else: freezer = None
+	return freezer
+
 def is_frozen():
-	frozen = getattr(sys, "frozen", False) # new py2exe, py2app
-	if frozen is True: frozen = 'cx_freeze'
-	if not frozen:
-		if getattr(sys, "importers", False): frozen = 'old_py2exe'# old py2exe
-		elif imp.is_frozen("__main__"): frozen = 'tools/freeze'# tools/freeze
-	return frozen
+	return bool(get_freezer())
 
 def get_program_path(*subdirs):
-	frozen = is_frozen()
-	mainpath = getattr(sys.modules['__main__'], '__file__', None)
-	if frozen: path = os.path.dirname(os.path.realpath(sys.executable))
-	elif mainpath: path = os.path.dirname(os.path.realpath(mainpath))
-	else: path = os.path.realpath(os.getcwd())
-	return os.path.join(path, *subdirs)
+	freezer = get_freezer()
+	mainpath = getattr(sys.modules['__main__'], '__file__', False)
+	if freezer == 'pyinstaller': path = sys._MEIPASS
+	elif freezer == 'py2app': path = os.environ['RESOURCEPATH']
+	elif freezer is not None: path = os.path.dirname(sys.executable) #py2exe, cx_freeze, tools/freeze(?)
+	elif mainpath: path = os.path.dirname(mainpath) #not frozen, running from .py
+	elif os.path.basename(sys.executable).lower() in ('python.exe', 'python'): path = os.getcwd() #interractive
+	else: #wtf?
+		warn("Could not determine program path. Using current directory instead.")
+		path = os.getcwd()
+	return os.path.join(os.path.abspath(path), *subdirs)
 
 def get_settings_path(name, *subdirs):
 	userpath = os.path.join(get_program_path(), 'userconfig')
