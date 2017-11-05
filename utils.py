@@ -4,6 +4,7 @@
 
 from __future__ import print_function
 import argparse
+import contextlib
 import datetime
 from email import encoders
 from email.message import Message
@@ -24,6 +25,13 @@ import time
 import traceback
 import types
 from warnings import warn
+
+if sys.platform == 'win32':
+	# On Windows, the best timer is time.clock()
+	default_timer = time.clock
+else:
+	# On most other platforms the best timer is time.time()
+	default_timer = time.time
 
 COMMASPACE = ', '
 
@@ -254,3 +262,31 @@ def valid_email(email, unlikely=False):
 			return False
 		else: return True
 	return False
+
+def timeit(*args, **kwargs):
+	if callable(args[0]):
+		def wrapper(*a, **kw):
+			try:
+				start = default_timer()
+				retval = args[0](*a, **kw)
+				return retval
+			except: raise
+			finally:
+				duration=default_timer()-start
+				global _lastrun_duration
+				_lastrun_duration = duration
+		return wrapper
+	else:
+		def _wrap(f):	
+			def wrapper(*a, **kw):
+				try:
+					start = default_timer()
+					retval = f(*a, **kw)
+					return retval
+				except: raise
+				finally:
+					duration=default_timer()-start
+					global _lastrun_duration
+					_lastrun_duration = duration
+			return wrapper
+		return _wrap
