@@ -35,6 +35,10 @@ def _valid_path(path, filename='config.json', must_exist=True, create=False):
 		if os.path.isdir(path): path = os.path.join(path, filename) # it's a directory, add the file name
 		elif not os.path.isfile(path): raise ConfigError('Invalid path. Not a file or directory: {}'.format(path)) #it's not a file, die. Is a file falls through untouched.
 	return path
+			
+		
+		
+
 
 def get_config_parser(parents=[]):
 	parser=argparse.ArgumentParser(add_help=False, parents=parents)
@@ -130,6 +134,7 @@ class Config(collections.MutableMapping):
 
 	def reload(self):
 		self._configs = []
+		print(self.config_files)
 		for f in self.config_files: self._configs.append(self._parse(f))
 		if self._parser is not None:
 			args = self._parser.parse_known_args()[0]
@@ -138,7 +143,6 @@ class Config(collections.MutableMapping):
 			self.args = args
 
 	def save(self):
-		if not self.config_files: raise ConfigError('Config object has no associated file path.')
 		with codecs.open(self.config_files[-1], "wb", encoding="utf-8") as file_object:
 			json.dump(self._configs[-1], file_object, sort_keys=True, indent=2, separators=(",", ": "))
 
