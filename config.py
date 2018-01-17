@@ -11,12 +11,43 @@ import os.path
 import threading
 
 # Local Modules:
+from .log import get_logging_parser
 from .utils import get_program_path, get_settings_path
 
 config_lock = threading.RLock()
 
 class ConfigError(Exception):
 	"""Config Error"""
+
+def _valid_path(path, filename='config.json', must_exist=True, create=False):
+	path = os.path.abspath(path) #be sure we have an absolute path
+	exists = os.path.exists(path)
+	if must_exist and not exists: raise ConfigError('file does not exist: {}'.format(path))
+	if not exists: #assume path is a file
+		dirname, filename = os.path.dirname(path), os.path.basename(path)
+		if not os.path.exists(dirname): #parent directory doesn't exist
+			if not create: raise ConfigError('Directory does not exist: {}'.format(dirname)) # so we can't create a file.
+			else: os.makedirs(dirname) #so make it and all it's parents if necessary
+		if not filename.lower().endswith('.json'): #Add .json file ext
+			filename += '.json'
+		path = os.path.join(dirname, filename)
+	else: # path does exist
+		if os.path.isdir(path): path = os.path.join(path, filename) # it's a directory, add the file name
+		elif not os.path.isfile(path): raise ConfigError('Invalid path. Not a file or directory: {}'.format(path)) #it's not a file, die. Is a file falls through untouched.
+	return path
+			
+		
+		
+
+
+def get_config_parser(parents=[]):
+	parser=argparse.ArgumentParser(add_help=False, parents=parents)
+	group = parser.add_argument_group(title='Configuration options', description='(Options are mutually exclusive.)')
+	valid_path = lambda path:_valid_path(path, filename=self._defaultfilename) # because instance methods appear to not be hashable (???)
+	xgroup = group.add_mutually_exclusive_group(required=False)
+	xgroup.add_argument('-c', '--config-file', action='append', dest='configfilepath', type=valid_path, help='Path to additional config file to use. This option can be used multiple times to include multiple files. Only the last one given will be written to.')
+	xgroup.add_argument('-C', '--1config-file', dest='configfilepath', type=valid_path, help='Path to config file to use. This option will use *ONLY* this file, discarding all others.')
+	return parser
 
 class Config(collections.MutableMapping):
 	"""JSON config file parser
@@ -34,16 +65,16 @@ class Config(collections.MutableMapping):
 		super(Config, self).__init__()
 		self.config_files = []
 		self._defaultfilename = kwargs.pop('filename', 'config.json')
-		self._args_excludes = []
-		parser = kwargs.pop('parser', None)
+		self._args_excludes = set()
 		arg_configs = kwargs.pop('arg_configs', False)
 		args_as_keys = kwargs.pop('args_as_keys', False)
-		if (arg_configs or args_as_keys) and parser is None: parser = argparse.ArgumentParser()
+		parents = kwargs.pop('parents', [])
+		parser = get_config_parser(parents=parents)
 		self.args = None
-		self._parser = parser
 		for path in args:
-			self.config_files.append(self._valid_path(path, existing=False))
-		if arg_configs: self._get_arg_configs()
+			self.config_files.append(_valid_path(path, filename=self._defaultfilename, must_exist=False, create=True))
+		if arg_configs: self._get_arg_configs(parser)
+		self._parser = parser
 		self.reload()
 
 	def __getitem__(self, key):
@@ -71,16 +102,11 @@ class Config(collections.MutableMapping):
 		return d
 
 	def _get_arg_configs(self, parser):
-		group = parser.add_argument_group(title='Configuration options', description='(Options are mutually exclusive.)')
-		xgroup = group.add_mutually_exclusive_group(required=False)
-		valid_path = lambda path:self._valid_path(path) # because instance methods appear to not be hashable (???)
-		xgroup.add_argument('-c', '--config-file', action='append', dest='configfilepath', type=valid_path, help='Path to additional config file to use. This option can be used multiple times to include multiple files. Only the last one given will be written to.')
-		xgroup.add_argument('-C', '--1config-file', dest='configfilepath', type=valid_path, help='Path to config file to use. This option will use *ONLY* this file, discarding all others.')
-		path = parser.parse_known_args()[0].configfilepath
+		path = getattr(parser.parse_known_args()[0], 'configfilepath', None)
 		if path is not None:
 			if isinstance(path, str): self.config_files = [path]
 			else: self.config_files += path
-		if 'configfilepath' not in self._args_excludes: self._args_excludes.append('configfilepath')
+		if 'configfilepath' not in self._args_excludes: self._args_excludes.add('configfilepath')
 
 	def _parse(self, file_name):
 		if os.path.exists(file_name):
@@ -97,17 +123,6 @@ class Config(collections.MutableMapping):
 		else:
 			return {}
 
-	def _valid_path(self, path, existing=True):
-		if not os.path.isabs(path): path = os.path.abspath(path)
-		if os.path.isdir(path): path = os.path.join(path, self._defaultfilename)
-		if os.path.exists(path):
-			if os.path.isfile(path): return path
-			elif os.path.isdir(path): raise ConfigError('{} is a directory.'.format(path))
-			else: raise ConfigError('{} exists, but is not a file.'.format(path))
-		else:
-			if not existing and os.path.isdir(os.path.dirname(path)): return path
-			else: raise ConfigError('Path does not exist: {}'.format(path))
-
 	def clear(self):
 		return self._configs[-1].clear()
 
@@ -119,6 +134,7 @@ class Config(collections.MutableMapping):
 
 	def reload(self):
 		self._configs = []
+		print(self.config_files)
 		for f in self.config_files: self._configs.append(self._parse(f))
 		if self._parser is not None:
 			args = self._parser.parse_known_args()[0]

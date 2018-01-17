@@ -263,6 +263,24 @@ def valid_email(email, unlikely=False):
 		else: return True
 	return False
 
+def dateargs(parser=None, desc='uninteresting', default=None, help='date string', print_tb=False):
+	"""adds date-handling arguments.
+	
+	Adds -d, --date argument that accepts various date strings and stores as datetime.date instances to the supplied parser.
+	If no parser is supplied, one is created.
+	
+	keyword arguments:
+	parser -- argparse.ArgumentParser instance to use. If None, one is created. (default None)
+	desc -- description to use for parser if one is created. (default 'uninteresting')
+	default -- default date if argument isn't supplied. If None, defaults to datetime.date.today(). (default None)
+	help -- message to use for help string of date option. Format instructions are appended. (default 'date string')
+	
+	returns: The supplied or created parser.
+	"""
+	if parser is None: parser = argparse.ArgumentParser(description=desc)
+	parser.add_argument('-d', '--date', dest='date', type=valid_date_type, default=default or datetime.date.today(), help='{}\n    Valid formats are "YYYY-MM-DD", "MM-DD-YYYY", "MM-DD" which defaults to this year or "DD"for number of days ago.'.format(help))
+	return parser
+
 def timeit(*args, **kwargs):
 	if callable(args[0]):
 		def wrapper(*a, **kw):
