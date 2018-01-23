@@ -12,7 +12,7 @@ import os
 import sys
 import time
 import traceback
-from .config import Config, config_lock
+from .config import Config, get_config_parser
 from .log import *
 from .utils import get_program_path, get_settings_path, is_exc_info, valid_date_type, sendmail
 
@@ -85,7 +85,6 @@ class ProgWrapper(object):
 		opts['parent_parsers'] = parent_parsers
 		opts['parser'] = argparse.ArgumentParser(parents=parent_parsers)
 
-
 	def config_startup(self, opts):
 		progpath = os.path.join(opts['program_path'], opts['datadir'])
 		settingspath = os.path.join(opts['settings_path'], opts['datadir'])
@@ -100,10 +99,10 @@ class ProgWrapper(object):
 	def logging_startup(self, opts):
 		c = opts['config']
 		if not c.get('loglevel'): return
-		if c['log2stdout']: stream = sys.stdout
-		elif c['log2stderr']: stream = sys.stderr
+		if c['stdout']: stream = sys.stdout
+		elif c['stderr']: stream = sys.stderr
 		else: stream = None
-		if stream: stream_level = c['log2stdout'] or c['log2stderr']
+		if stream: stream_level = c['stdout'] or c['stderr']
 		else: stream_level = None
 		logfile = initlog(stream=stream, stream_level=stream_level, **c)
 		opts['logfile'] = logfile

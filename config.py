@@ -3,6 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 # Built-in Modules:
+from __future__ import print_function
 import argparse
 import codecs
 import collections
@@ -68,8 +69,8 @@ class Config(collections.MutableMapping):
 		self._args_excludes = set()
 		arg_configs = kwargs.pop('arg_configs', False)
 		args_as_keys = kwargs.pop('args_as_keys', False)
-		parents = kwargs.pop('parents', [])
-		parser = get_config_parser(parents=parents)
+		parents = kwargs.pop('parent_parsers', [])
+		parser = kwargs.pop('parser', None) or get_config_parser(parents=parents)
 		self.args = None
 		for path in args:
 			self.config_files.append(_valid_path(path, filename=self._defaultfilename, must_exist=False, create=True))
@@ -134,7 +135,6 @@ class Config(collections.MutableMapping):
 
 	def reload(self):
 		self._configs = []
-		print(self.config_files)
 		for f in self.config_files: self._configs.append(self._parse(f))
 		if self._parser is not None:
 			args = self._parser.parse_known_args()[0]

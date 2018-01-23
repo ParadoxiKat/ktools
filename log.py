@@ -2,6 +2,8 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+from __future__ import print_function
+import argparse
 import logging
 import os
 import time
@@ -11,7 +13,7 @@ LOG_FMT_STR = '%(levelname)s: "%(message)s" from %(name)s in %(threadName)s @ %(
 LOG_DATEFMT_STR = '%m-%d-%Y %H:%M:%S'
 
 def initlog(**kwargs):
-	filename = (kwargs.get('filename') or kwargs.get('logfile', 'debug.log'))
+	filename = kwargs.get('filename') or kwargs.get('file') or kwargs.get('logfile') or 'debug.log'
 	mode = (kwargs.get('mode') or kwargs.get('logfilemode', 'w'))
 	level = (kwargs.get('level') or kwargs.get('loglevel', 0))
 	if isinstance(level, int): level = _fix_level_number(level)
