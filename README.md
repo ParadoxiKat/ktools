@@ -1,5 +1,5 @@
-# cutie
+# toolbox
 
-Cutie -- Collection of Useful Tools, ideas, etc.
+toolbox -- a collection of useful tools
 
 Various modules and functions that are useful across projects.
