@@ -89,7 +89,7 @@ class ProgWrapper(object):
 		progpath = os.path.join(opts['program_path'], opts['datadir'])
 		settingspath = os.path.join(opts['settings_path'], opts['datadir'])
 		if not os.path.exists(settingspath): os.makedirs(settingspath)
-		c = Config(progpath, settingspath, arg_configs=True, args_as_keys=True, parser=opts['parser'], add_logging_args=True)
+		c = Config(progpath, settingspath, arg_configs=opts.get('arg_configs', False), envvars_as_keys=opts.get('envvars_as_keys', False), parser=opts['parser'], add_logging_args=True)
 		opts['config'] = c
 
 	def config_cleanup(self, opts):
@@ -128,4 +128,7 @@ class ProgWrapper(object):
 	def send_report(self, opts):
 		handler = opts.get('send_report')
 		report = opts.get('report')
+		cfg = opts['config']
+		sender, recipient, smtphost = cfg.get('crash_sender'), cfg.get('crash_recipient'), cfg.get('crash_host')
+		if not handler and all((sender, recipient, smtphost)): handler = lambda r:sendmail(sender, recipient, r['message'], smtphost=smtphost, subject=r['subject'], attach=r.get('attachments'))
 		if handler and report: handler(report)

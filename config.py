@@ -68,7 +68,7 @@ class Config(collections.MutableMapping):
 		self._defaultfilename = kwargs.pop('filename', 'config.json')
 		self._args_excludes = set()
 		arg_configs = kwargs.pop('arg_configs', False)
-		args_as_keys = kwargs.pop('args_as_keys', False)
+		self._envvars_as_keys = kwargs.pop('envvars_as_keys', False)
 		parents = kwargs.pop('parent_parsers', [])
 		parser = kwargs.pop('parser', None) or get_config_parser(parents=parents)
 		self.args = None
@@ -79,6 +79,8 @@ class Config(collections.MutableMapping):
 		self.reload()
 
 	def __getitem__(self, key):
+		ukey = key.upper()
+		if ukey in self._config: return self._config[ukey]
 		return self._config[key]
 
 	def __setitem__(self, key, value):
@@ -99,6 +101,7 @@ class Config(collections.MutableMapping):
 	def _config(self):
 		d={}
 		for c in self._configs: d.update(c)
+		if self._envvars_as_keys: d.update(os.environ)
 		if self.args is not None: d.update(self.args._get_kwargs())
 		return d
 
