@@ -51,6 +51,13 @@ def get_freezer():
 def is_frozen():
 	return bool(get_freezer())
 
+def get_exe_path(*subdirs):
+	if is_frozen():
+		exepath = os.path.dirname(sys.executable)
+		if exepath == get_program_path(*subdirs): return ''
+		else: return os.path.join(os.path.abspath(exepath), *subdirs)
+	else: return ''
+
 def get_program_path(*subdirs):
 	freezer = get_freezer()
 	mainpath = getattr(sys.modules['__main__'], '__file__', False)

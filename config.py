@@ -73,7 +73,7 @@ class Config(collections.MutableMapping):
 		parser = kwargs.pop('parser', None) or get_config_parser(parents=parents)
 		self.args = None
 		for path in args:
-			self.config_files.append(_valid_path(path, filename=self._defaultfilename, must_exist=False, create=True))
+			if path: self.config_files.append(_valid_path(path, filename=self._defaultfilename, must_exist=False, create=True))
 		if arg_configs: self._get_arg_configs(parser)
 		self._parser = parser
 		self.reload()

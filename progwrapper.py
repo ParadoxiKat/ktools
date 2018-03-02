@@ -14,7 +14,7 @@ import time
 import traceback
 from .config import Config, get_config_parser
 from .log import *
-from .utils import get_program_path, get_settings_path, is_exc_info, valid_date_type, sendmail
+from .utils import get_exe_path, get_program_path, get_settings_path, is_exc_info, valid_date_type, sendmail
 
 class _Handler(object):
 	def __init__(self, func, args=None, kwargs=None):
@@ -33,13 +33,15 @@ class ProgWrapper(object):
 		if 'progname' not in opts:
 			opts['progname'] = os.path.basename(sys.argv[0]) or os.path.basename(sys.executable)
 			logger.debug('"progname" not supplied, defaulting to "{}"'.format(opts['progname']))
-		opts['program_path'] = get_program_path()
-		logger.debug('program_path: {}'.format(opts['program_path']))
-		opts['settings_path'] = get_settings_path(opts['progname'])
-		if not os.path.exists(opts['settings_path']): os.makedirs(opts['settings_path'])
-		logger.debug('settings_path: {}'.format(opts['settings_path']))
 		if 'datadir' not in opts: opts['datadir'] = ''
 		logger.debug('datadir: {}'.format(opts['datadir']))
+		opts['program_path'] = get_program_path(opts['datadir'])
+		logger.debug('program_path: {}'.format(opts['program_path']))
+		opts['exe_path'] = get_exe_path(opts['datadir'])
+		logger.debug('exe_path: {}'.format(opts['exe_path']))
+		opts['settings_path'] = get_settings_path(opts['progname'], opts['datadir'])
+		if not os.path.exists(opts['settings_path']): os.makedirs(opts['settings_path'])
+		logger.debug('settings_path: {}'.format(opts['settings_path']))
 		parser = opts.get('parser')
 		if parser is not None:
 			parent_parsers = [parser]
@@ -86,10 +88,11 @@ class ProgWrapper(object):
 		opts['parser'] = argparse.ArgumentParser(parents=parent_parsers)
 
 	def config_startup(self, opts):
-		progpath = os.path.join(opts['program_path'], opts['datadir'])
-		settingspath = os.path.join(opts['settings_path'], opts['datadir'])
-		if not os.path.exists(settingspath): os.makedirs(settingspath)
-		c = Config(progpath, settingspath, arg_configs=opts.get('arg_configs', False), envvars_as_keys=opts.get('envvars_as_keys', False), parser=opts['parser'], add_logging_args=True)
+		exepath = opts['exe_path']
+		progpath = opts['program_path']
+		settingspath = opts['settings_path']
+		#if not os.path.exists(settingspath): os.makedirs(settingspath)
+		c = Config(progpath, exepath, settingspath, arg_configs=opts.get('arg_configs', False), envvars_as_keys=opts.get('envvars_as_keys', False), parser=opts['parser'], add_logging_args=True)
 		opts['config'] = c
 
 	def config_cleanup(self, opts):
