@@ -8,7 +8,7 @@ import argparse
 import codecs
 import collections
 # For encrypt/decrypt support. It's an optional feature, so don't fail if cryptography isn't installed
-try: import cryptography
+try: import cryptography.fernet
 except ImportError as e: cryptography = None
 import io
 import json
@@ -61,7 +61,7 @@ class DataFile(io.StringIO):
 	All data is stored in-memory, thus supporting of large files is likely problematic.
 	Compression requires cryptography to be installed."""
 
-	def __init__(self, filename=None, initial_value='', newline='\n', encode=True, encoding_type='utf-8', compress=False, compression_level=-1, encrypt=False, encryption_key=None):
+	def __init__(self, filename=None, initial_value=u'', newline='\n', encode=True, encoding_type='utf-8', compress=False, compression_level=-1, encrypt=False, encryption_key=None):
 		# Init the underlying StringIO object.
 		super(DataFile, self).__init__(initial_value=initial_value, newline=newline)
 		# Save the other attributes
@@ -104,7 +104,7 @@ class DataFile(io.StringIO):
 		f.write(data)
 		f.close()
 
-	def load(self, *args, encryption_key=None):
+	def load(self, encryption_key=None, *args):
 		if len(args) >1: raise TypeError('load() takes 1 or 2 positional arguments but {} were given'.format(len(args)+1))
 		if self.filename is None and not args: raise ValueError('No file name associated with this DataFile object and no file name supplied to load().')
 		if args: self.filename, filename = args[0]
