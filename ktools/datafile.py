@@ -1,7 +1,11 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
 from __future__ import print_function
 import codecs
-try: import cryptography.fernet
-except ImportError as e: cryptography = None
+try: import nacl.hash, nacl.secret, nacl.utils
+except ImportError as e: nacl = None
 import io
 import os.path
 import zlib
@@ -10,7 +14,7 @@ class DataFile(io.StringIO):
 	"""Data file object that can transparently encode/compress/encrypt data.
 	
 	All data is stored in-memory, thus supporting of large files is likely problematic.
-	Compression requires cryptography to be installed."""
+	Encryption requires pynacl to be installed."""
 
 	def __init__(self, filename=None, initial_value=u'', newline='\n', encode=True, encoding_type='utf-8', compress=False, compression_level=-1, encrypt=False, encryption_key=None):
 		# Init the underlying StringIO object.
@@ -62,14 +66,18 @@ class DataFile(io.StringIO):
 		else: filename = self.filename
 		data = self._readfile(filename)
 		if self.encrypt:
-			if cryptography is None:
+			if nacl is None:
 				self.encrypt = False
 				import warnings
-				warnings.warn("Encryption specified, but cryptography is not installed. Disabling encryption.")
+				warnings.warn("Encryption specified, but pynacl is not installed. Disabling encryption.")
+			# Look for the encryption key
 			encryption_key = encryption_key or self.encryption_key or os.environ.get('encryption_key', None)
+			# Disable encryption if no key found.
 			if encryption_key is None: raise RunTimeError('Encryption specified for {}, but no key was found.'.format(filename))
-			fernet = cryptography.fernet.Fernet(encryption_key)
-			data = fernet.decrypt(data)
+			# Create the secret box for encryption/decryption
+			box = nacl.secret.SecretBox(encryption_key)
+			# Try and decrypt data using our key.
+			data = box.decrypt(data)
 		if self.compress:
 			data = zlib.decompress(data)
 		if self.encode:
@@ -88,14 +96,18 @@ class DataFile(io.StringIO):
 		if self.compress:
 			data = zlib.compress(data, self.compression_level)
 		if self.encrypt:
-			if cryptography is None:
+			if nacl is None:
 				self.encrypt = False
 				import warnings
-				warnings.warn("Encryption specified, but cryptography is not installed. Disabling encryption.")
+				warnings.warn("Encryption specified, but pynacl is not installed. Disabling encryption.")
+			# Look for the encryption key
 			encryption_key = encryption_key or self.encryption_key or os.environ.get('encryption_key', None)
+			# disable encryption if no key found.
 			if encryption_key is None: raise RunTimeError('Encryption specified for {}, but no key was found.'.format(filename))
-			fernet = cryptography.fernet.Fernet(encryption_key)
-			data = fernet.encrypt(data)
+			# Create secret box for encryption/decryption.
+			box = nacl.secret.SecretBox(encryption_key)
+			# Encrypt data with the key.
+			data = box.encrypt(data)
 		# Data has been encoded, compressed, and encrypted. Save to file.
 		filename = filename or self.filename
 		self._writefile(filename, data)
