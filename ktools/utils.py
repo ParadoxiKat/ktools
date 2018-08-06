@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from __future__ import print_function
+from __future__ import absolute_import, annotations, division, print_function, unicode_literals
 import argparse
 import contextlib
 import datetime
@@ -107,6 +107,38 @@ def load_modules(n=1):
 		except Exception as e:
 			print('Failed loading module {}.\n{}'.format(filename, traceback.format_exc()))
 	return modules
+
+def getbits(mem, asbool=False, little_endian=True):
+	"""Convert an integer byte into it's component bits.
+	
+	parameters:
+	mem:int - the integer to be split.
+	
+	Keyword args:
+	asbool:bool  - Determins whether the returned tuple contains int values 
+		representing just the bits present, or a True/False value for
+		every possible bit. Default False.
+	little_endian:bool - Determins whether the returned tuple is in big or
+		little endian order. Default True.
+	
+	returns:tuple - Tuple containing the int values of present bits, or True/False values for all possible bits.
+	"""
+	bits = []
+	testbit = 1
+	while mem >= testbit:
+		# Check if testbit is in mem.
+		bit = mem&testbit
+		# remove the bit, if present, from mem.
+		mem ^= bit
+		if asbool:
+			# Add bool representation of bit.
+			bits.append(bool(bit))
+		else:
+			#only add bit if it's non-zero.
+			if bit: bits.append(bit)
+		#double testbit for next round.
+		testbit *= 2
+	return tuple(sorted(bits, reverse=not little_endian))
 
 def has_generator_started(g):
 	"""return True if generator g has started running, False otherwise."""
