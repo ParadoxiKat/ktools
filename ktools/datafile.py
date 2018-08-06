@@ -2,42 +2,93 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-from __future__ import print_function
+from __future__ import absolute_import, annotations, division, print_function
+
+import bz2
 import codecs
-try: import nacl.hash, nacl.secret, nacl.utils
-except ImportError as e: nacl = None
+import hashlib
 import io
+# On python2, backports.lzma must be installed.
+try: import lzma
+except ImportError as e: lzma = None
 import os.path
+import struct
 import zlib
 
-class DataFile(io.StringIO):
-	"""Data file object that can transparently encode/compress/encrypt data.
+# pynacl is optional, attempt to import all it's relevant sub packages.
+try:
+	import nacl.bindings
+	import nacl.hash
+	import nacl.public
+	import nacl.pwhash
+	import nacl.secret
+	import nacl.signing
+	import nacl.utils
+except ImportError as e:
+	nacl = None
+
+
+class Datafile(object):
+	"""A file-like object that can encode/compress/encrypt/hash/sign data.
 	
 	All data is stored in-memory, thus supporting of large files is likely problematic.
-	Encryption requires pynacl to be installed."""
+	Encryption, signing, and some hash functions  require pynacl to be installed.
+	lzma compression support on python2 requires backports.lzma package.
+	<add argument docs here>
+	"""
 
-	def __init__(self, filename=None, initial_value=u'', newline='\n', encode=True, encoding_type='utf-8', compress=False, compression_level=-1, encrypt=False, encryption_key=None):
-		# Init the underlying StringIO object.
-		super(DataFile, self).__init__(initial_value=initial_value, newline=newline)
-		# Save the other attributes
-		if filename is None: self.filename = filename
-		else: self.filename = os.path.abspath(filename)
+	_io_obj = None
+
+	def __init__(self, filename=None, initial_value=None, newline=None, 
+			encode=False, encoding_type=None,
+			compress=False, compression_level=-1,
+			encrypt=False, encryption_key=None
+			):
+		if filename is None:
+			self.filename = filename
+		else:
+			self.filename = os.path.abspath(filename)
 		self.encode = encode		
 		self.encoding_type= encoding_type
 		self.compress = compress
 		self.compression_level = compression_level
 		self.encrypt = encrypt
 		self.encryption_key = encryption_key
+		self._make_io_obj(initial_value=initial_value, newline=newline)
+
+	def __getattribute__(self, attr):
+		try:
+			return super(Datafile, self).__getattribute__(attr)
+		except AttributeError as e:
+			# Pass failed lookups to the underlying _io_obj
+			# We don't want to lookup methods of _io_obj that start with '_'.
+			_attr = None if attr.startswith('_') else getattr(self._io_obj, attr, None)
+			if _attr is None:
+				raise
+			return _attr
+
+	def _make_io_obj(self, initial_value=None, newline=None):
+		# Create io object for internal use based on encoding settings.
+		if self.encode:
+			if initial_value is None: initial_value = u''
+			if newline is None: newline = u'\n'
+			self._io_obj = io.StringIO(initial_value=initial_value, newline=newline)
+			self._io_obj.newlines = newline
+		else:
+			if initial_value is None: initial_value = b''
+			self._io_obj = io.BytesIO(initial_bytes=initial_value)
 
 	def _readfile(self, filename):
 		"""Attempt to open the specified file and return it's contents
 		
-		If it fails, attempt to create necessary directories and the file and return an empty string."""
+		If it fails, attempt to create necessary directories and the file and return an empty string.
+		"""
 		try: f=open(filename, 'rb')
 		except PermissionError as e:
 			if os.path.isdir(filename): raise ValueError('{} is a directory.'.format(filename))
 			else: raise e
 		except FileNotFoundError as e:
+			# Path exists, file doesn't. Create and retry.
 			self._writefile(filename, b'')
 			return self._readfile(filename)
 		except exception as e: raise e
@@ -48,7 +99,8 @@ class DataFile(io.StringIO):
 	def _writefile(self, filename, data):
 		"""Write the data to a file
 		
-		Create file and missing directories if needed."""
+		Create file and missing directories if needed.
+		"""
 		try: f=open(filename, 'wb')
 		except FileNotFoundError as e:
 			dirname = os.path.dirname(filename)
@@ -61,7 +113,7 @@ class DataFile(io.StringIO):
 
 	def load(self, encryption_key=None, *args):
 		if len(args) >1: raise TypeError('load() takes 1 or 2 positional arguments but {} were given'.format(len(args)+1))
-		if self.filename is None and not args: raise ValueError('No file name associated with this DataFile object and no file name supplied to load().')
+		if self.filename is None and not args: raise ValueError('No file name associated with this Datafile object and no file name supplied to load().')
 		if args: self.filename, filename = args[0]
 		else: filename = self.filename
 		data = self._readfile(filename)
