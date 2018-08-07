@@ -108,7 +108,7 @@ def load_modules(n=1):
 			print('Failed loading module {}.\n{}'.format(filename, traceback.format_exc()))
 	return modules
 
-def getbits(mem, asbool=False, little_endian=True):
+def getbits(mem, asbool=False, little_endian=True, numbits=0):
 	"""Convert an integer byte into it's component bits.
 	
 	parameters:
@@ -120,12 +120,15 @@ def getbits(mem, asbool=False, little_endian=True):
 		every possible bit. Default False.
 	little_endian:bool - Determins whether the returned tuple is in big or
 		little endian order. Default True.
+	numbits:int - Number of bits to check for. Default 0 = all.
 	
 	returns:tuple - Tuple containing the int values of present bits, or True/False values for all possible bits.
 	"""
 	bits = []
 	testbit = 1
-	while mem >= testbit:
+	bits_checked = 0
+	while ((numbits > 0 and bits_checked < numbits)
+		or mem >= testbit):
 		# Check if testbit is in mem.
 		bit = mem&testbit
 		# remove the bit, if present, from mem.
@@ -136,9 +139,14 @@ def getbits(mem, asbool=False, little_endian=True):
 		else:
 			#only add bit if it's non-zero.
 			if bit: bits.append(bit)
-		#double testbit for next round.
+		#double testbit for next round, and increment bits_checked.
 		testbit *= 2
-	return tuple(sorted(bits, reverse=not little_endian))
+		if numbits: bits_checked += 1
+		
+	# Bits were discovered in little-endian order.
+	if not little_endian:
+		bits = bits.reverse()
+	return bits
 
 def has_generator_started(g):
 	"""return True if generator g has started running, False otherwise."""
