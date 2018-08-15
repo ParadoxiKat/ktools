@@ -125,7 +125,7 @@ class ProgWrapper(object):
 		report = opts.get('report', {})
 		report['subject'] = ' + '.join((report.get('subject', ''), subject)) if report.get('subject') else subject
 		report['message'] = '{}\n\n{}\n\n{}'.format(message, '-'*20, report.get('message', '')) if report.get('message') else message
-		report['attachments'] = report.get('attachments', set()) or attachments
+		report['attachments'] = report.get('attachments', set()) | attachments
 		opts['report'] = report
 
 	def send_report(self, opts):
