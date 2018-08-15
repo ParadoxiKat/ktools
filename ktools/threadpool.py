@@ -5,6 +5,7 @@
 """Implements a simple threadpool."""
 
 from __future__ import division, print_function
+from collections import defaultdict
 import logging
 try:
 	import Queue as queue
@@ -13,13 +14,31 @@ except ImportError:
 import threading
 from types import GeneratorType
 
-# Monkey patch range with xrange in Python2.
+# Monkey patch range with xrange in Py2. Same for unicode -> str in py3
 try:
+	# This succeeds in py2
 	_range, range = range, xrange
 except NameError:
-	pass
+	# This is py3
+	# Mainly for isinstance(x, (bytes, str, unicode))
+	unicode = str
 
 logger=logging.getLogger(__name__)
+UNHANDLEABLE_EXCEPTIONS = (AssertionError,
+	IOError,
+	IndentationError,
+	KeyboardInterrupt,
+	MemoryError,
+	NameError,
+	OSError,
+	SyntaxError,
+	SystemExit,
+	TabError,
+	UnboundLocalError,
+	WindowsError,
+)
+
+
 
 class ThreadPoolDying(Exception):
 	"""raised when insert_task or insert_tasks is called on a dying pool"""
@@ -52,7 +71,7 @@ class ThreadPool(object):
 			self.stop()
 			if etype is KeyboardInterrupt: raise etype, val, tb
 		else:
-			self.stop(finish=False)
+			self.stop(finish=False, wait=False)
 			raise etype, val, tb
 
 	@property
@@ -97,7 +116,8 @@ class ThreadPool(object):
 	def _newthread(self, queue, timeout=0.5):
 		if self.dying: return
 		new_thread = _WorkerThread(self, queue, timeout=timeout)
-		if callable(self.setup): self.setup(new_thread)
+		if callable(self.setup):
+			self.setup(new_thread)
 		if self.started: new_thread.start()
 		self._threads.add(new_thread)
 
@@ -195,12 +215,22 @@ class ThreadPool(object):
 
 	def stop_thread(self, thread):
 		thread.alive = False
-		if callable(self.cleanup): self.cleanup(thread)
+		if not thread._cleaned and callable(self.cleanup):
+			# TO ensure subsequent calls to stop_thread don't call cleanup again.
+			self.cleanup(thread)
+			thread._cleaned = True
 		try: self._threads.remove(thread)
 		except KeyError: pass
 
 class _WorkerThread(threading.Thread):
 	"""Worker thread for use by the threadpool only!"""
+
+	# To ensure cleanup is only run once.
+	_cleaned = False
+	# To track repeat exceptions so as to fail at a given threshhold.
+	_exceptions_counter = defaultdict(lambda:0)
+	_fail_limit = 10
+
 	def __init__(self, pool, tasks_queue, timeout=0.5):
 		self.alive=True
 		self.id = pool._firstid
@@ -242,8 +272,10 @@ class _WorkerThread(threading.Thread):
 			logger.debug("{}: Calling {} with args {} and kwargs {}.".format(self.name, func, args, kwargs))
 			result = func(*args, **kwargs)
 			logger.debug('{}: {} returned "{}".'.format(self.name, func, result))
-		except:
-			logger.exception('{} raised an exception:'.format(func))
+		except UNHANDLEABLE_EXCEPTIONS as e:
+			raise e
+		except Exception as e:
+			logger.exception('{} raised an exception:'.format((func, args, kwargs)))
 			result = sys.exc_info()
 		finally:
 			logger.debug("Calling callback {} with result {}.".format(callback, result))
@@ -251,8 +283,8 @@ class _WorkerThread(threading.Thread):
 
 	def run(self):
 		logger.debug("{} starting".format(self.name))
-		#self.alive determines when this thread should die. pool.alive determines when all threads should die.
-		#self.alive is set to false when None is received as a task.
+		# self.alive determines when this thread should die. pool.alive determines when all threads should die.
+		# self.alive is set to false when None is received as a task.
 		try:
 			while self.alive:
 				try:
@@ -260,13 +292,31 @@ class _WorkerThread(threading.Thread):
 					logger.debug('Received task: "{}"'.format(task))
 				except queue.Empty:
 					continue
-				self.process_task(task)
-				self.tasks_queue.task_done()
-		except:
+				try:
+					self.process_task(task)
+				except UNHANDLEABLE_EXCEPTIONS as e:
+					# Any of these exceptions are fatal.
+					# Shutdown, and re-raise.
+					self.stop()
+					raise e
+				except Exception as e:
+					# These exceptions are potentially one-offs. An oddball task that doesn't conform. 
+					# We should try and keep going after logging as much as we can.
+					# Unless the same exception keeps happening, then die.
+					exc_type = sys.exc_info()[0]
+					self._exceptions_counter[exc_type] += 1
+					exc_count = self._exceptions_counter[exc_type]
+					logger.exception('Fail #{} of {}.'.format(exc_count, self._fail_limit))
+					logger.error('Task was: {}'.format(task))
+					if self._exceptions_counter[exc_type] >= self._fail_limit:
+						self.stop()
+				finally:
+					self.tasks_queue.task_done()
+		except Exception as e:
 			logger.exception('Unhandled error')
 		finally:
-			logger.debug('{}: loop exiting.'.format(self.name))
-		self.stop()
+			self.stop()
+			logger.debug('{}: loop exited.'.format(self.name))
 
 	def stop(self):
 		self.pool.stop_thread(self)
